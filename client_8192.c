@@ -1,3 +1,4 @@
+#include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,6 +35,103 @@ static int send_all(int fd, const char *text)
     return 0;
 }
 
+/*
+ * Return 1 if sent, 0 for a local input/file error,
+ * and -1 for a broken connection.
+ */
+static int send_file_command(int fd, const char *command)
+{
+    char target[32];
+    char filename[101];
+    char extra;
+
+    if (sscanf(command + 9, "%31s %100s %c",
+               target, filename, &extra) != 2) {
+        fprintf(stderr,
+                "Usage: SENDFILE <target> <filename>\n");
+        return 0;
+    }
+
+    if (strchr(filename, '/') != NULL ||
+        strchr(filename, '\\') != NULL) {
+        fprintf(stderr,
+                "Use a filename in the current directory.\n");
+        return 0;
+    }
+
+    FILE *file = fopen(filename, "rb");
+
+    if (file == NULL) {
+        perror("open file");
+        return 0;
+    }
+
+    struct stat information;
+
+    if (fstat(fileno(file), &information) == -1) {
+        perror("file size");
+        fclose(file);
+        return 0;
+    }
+
+    if (!S_ISREG(information.st_mode) ||
+        information.st_size < 0 ||
+        information.st_size > 1024 * 1024) {
+        fprintf(stderr,
+                "Choose a regular file no larger than 1 MiB.\n");
+        fclose(file);
+        return 0;
+    }
+
+    size_t size = (size_t)information.st_size;
+    unsigned char *data = malloc(size == 0 ? 1 : size);
+
+    if (data == NULL) {
+        perror("malloc");
+        fclose(file);
+        return 0;
+    }
+
+    /* Read before sending the header to avoid an incomplete upload. */
+    if (fread(data, 1, size, file) != size) {
+        fprintf(stderr, "Could not read the complete file.\n");
+        free(data);
+        fclose(file);
+        return 0;
+    }
+
+    fclose(file);
+
+    char header[256];
+    snprintf(header, sizeof(header),
+             "SENDFILE %s %s %zu\n", target, filename, size);
+
+    if (send_all(fd, header) == -1) {
+        free(data);
+        return -1;
+    }
+
+    size_t sent = 0;
+
+    while (sent < size) {
+        ssize_t n = send(fd, data + sent,
+                         size - sent, MSG_NOSIGNAL);
+
+        if (n < 0 && errno == EINTR)
+            continue;
+
+        if (n <= 0) {
+            free(data);
+            return -1;
+        }
+
+        sent += (size_t)n;
+    }
+
+    free(data);
+    printf("Uploaded %s (%zu bytes).\n", filename, size);
+    return 1;
+}
 int main(void)
 {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -69,7 +167,10 @@ int main(void)
     char command[BUFFER_SIZE];
     char response[BUFFER_SIZE];
     size_t command_used = 0;
-    size_t response_used = 0;
+    size_t response_used = 0;    FILE *incoming_file = NULL;
+    unsigned long long incoming_remaining = 0;
+    char incoming_path[256] = {0};
+    int incoming_write_failed = 0;
     int discard_command = 0;
     int status = EXIT_SUCCESS;
     int running = 1;
@@ -111,10 +212,119 @@ int main(void)
 
             for (ssize_t i = 0; i < n; ++i) {
                 char ch = incoming[i];
+                if (incoming_remaining > 0) {
+                    if (incoming_file != NULL &&
+                        !incoming_write_failed) {
+                        if (fputc((unsigned char)ch,
+                                  incoming_file) == EOF)
+                            incoming_write_failed = 1;
+                    }
+
+                    --incoming_remaining;
+
+                    if (incoming_remaining == 0) {
+                        if (incoming_file != NULL) {
+                            if (fclose(incoming_file) == EOF)
+                                incoming_write_failed = 1;
+                            incoming_file = NULL;
+                        }
+
+                        if (incoming_write_failed) {
+                            fprintf(stderr,
+                                    "\nCould not save received file.\n");
+                            if (incoming_path[0] != '\0')
+                                unlink(incoming_path);
+                        } else {
+                            printf("\nReceived file saved: %s\n",
+                                   incoming_path);
+                        }
+
+                        printf("> ");
+                        fflush(stdout);
+                    }
+
+                    continue;
+                }
 
                 if (ch == '\n') {
                     response[response_used] = '\0';
                     printf("\n%s\n", response);
+                    if (strncmp(response, "MSG FILE ", 9) == 0) {
+                        char sender[32];
+                        char filename[101];
+                        unsigned long long size;
+                        char extra;
+                        const char *safe_chars =
+                            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                            "abcdefghijklmnopqrstuvwxyz"
+                            "0123456789_.-";
+
+                        int fields = sscanf(
+                            response + 9, "%31s %100s %llu %c",
+                            sender, filename, &size, &extra);
+
+                        if (fields != 3 ||
+                            size > 1024ULL * 1024ULL ||
+                            strspn(sender, safe_chars) !=
+                                strlen(sender) ||
+                            strspn(filename, safe_chars) !=
+                                strlen(filename)) {
+                            fprintf(stderr,
+                                    "Invalid incoming file header.\n");
+                            status = EXIT_FAILURE;
+                            running = 0;
+                            break;
+                        }
+
+                        incoming_remaining = size;
+                        incoming_write_failed = 0;
+                        incoming_path[0] = '\0';
+                        incoming_file = NULL;
+
+                        if (mkdir("./received", 0700) == -1 &&
+                            errno != EEXIST) {
+                            incoming_write_failed = 1;
+                        } else {
+                            snprintf(incoming_path,
+                                     sizeof(incoming_path),
+                                     "./received/%s_%s_XXXXXX",
+                                     sender, filename);
+
+                            int file_fd = mkstemp(incoming_path);
+
+                            if (file_fd == -1) {
+                                incoming_write_failed = 1;
+                                incoming_path[0] = '\0';
+                            } else {
+                                incoming_file = fdopen(file_fd, "wb");
+
+                                if (incoming_file == NULL) {
+                                    close(file_fd);
+                                    unlink(incoming_path);
+                                    incoming_path[0] = '\0';
+                                    incoming_write_failed = 1;
+                                }
+                            }
+                        }
+
+                        if (size == 0) {
+                            if (incoming_file != NULL) {
+                                if (fclose(incoming_file) == EOF)
+                                    incoming_write_failed = 1;
+                                incoming_file = NULL;
+                            }
+
+                            if (incoming_write_failed) {
+                                fprintf(stderr,
+                                        "Could not save empty file.\n");
+                                if (incoming_path[0] != '\0')
+                                    unlink(incoming_path);
+                            } else {
+                                printf("Received file saved: %s\n",
+                                       incoming_path);
+                            }
+                        }
+                    }
 
                     if (strcmp(response,
                                "OK BYE NID:9281") == 0) {
@@ -169,12 +379,24 @@ int main(void)
                     command[command_used++] = '\n';
                     command[command_used] = '\0';
 
-                    if (send_all(fd, command) == -1) {
+                                        int send_result;
+
+                    if (strncmp(command, "SENDFILE ", 9) == 0) {
+                        send_result = send_file_command(fd, command);
+
+                        if (send_result == 0) {
+                            printf("> ");
+                            fflush(stdout);
+                        }
+                    } else {
+                        send_result = send_all(fd, command);
+                    }
+
+                    if (send_result == -1) {
                         perror("send");
                         status = EXIT_FAILURE;
                         break;
                     }
-
                     if (strcmp(command, "QUIT\n") == 0)
                         events[0].fd = -1;
                 } else {
@@ -192,6 +414,19 @@ int main(void)
                 }
             }
         }
+    }
+    if (incoming_remaining > 0) {
+        fprintf(stderr, "File transfer interrupted.\n");
+
+        if (incoming_file != NULL) {
+            fclose(incoming_file);
+            incoming_file = NULL;
+        }
+
+        if (incoming_path[0] != '\0')
+            unlink(incoming_path);
+
+        status = EXIT_FAILURE;
     }
 
     close(fd);
