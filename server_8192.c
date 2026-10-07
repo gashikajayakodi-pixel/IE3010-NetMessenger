@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,9 +19,11 @@ typedef struct {
     int fd;
     int active;
     char username[NAME_SIZE];
+        unsigned char room_membership[16];
 } Client;
 
 static Client clients[MAX_CLIENTS];
+static char room_names[16][NAME_SIZE];
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* Caller holds lock, so writes to each socket cannot interleave. */
@@ -247,7 +250,117 @@ static void *handle_client(void *argument)
                     deliver(target, response);
                     deliver(client, "OK SENT NID:9281\n");
                 }
-            }} else if (strcmp(line, "QUIT") == 0) {
+                        }
+        } else if (strncmp(line, "JOIN ", 5) == 0) {
+            const char *name = line + 5;
+            int room = -1;
+            int empty = -1;
+
+            for (int i = 0; i < 16; ++i) {
+                if (strcmp(room_names[i], name) == 0)
+                    room = i;
+                if (room_names[i][0] == '\0' && empty == -1)
+                    empty = i;
+            }
+
+            if (!valid_username(name)) {
+                deliver(client,
+                        "ERR 010 INVALID_ROOM NID:9281\n");
+            } else if (room == -1 && empty == -1) {
+                deliver(client,
+                        "ERR 011 ROOM_LIMIT NID:9281\n");
+            } else {
+                if (room == -1) {
+                    room = empty;
+                    strcpy(room_names[room], name);
+                }
+
+                client->room_membership[room] = 1;
+                snprintf(response, sizeof(response),
+                         "OK JOINED %s NID:9281\n", name);
+                deliver(client, response);
+            }
+        } else if (strncmp(line, "LEAVE ", 6) == 0) {
+            const char *name = line + 6;
+            int room = -1;
+
+            for (int i = 0; i < 16; ++i) {
+                if (room_names[i][0] != '\0' &&
+                    strcmp(room_names[i], name) == 0) {
+                    room = i;
+                    break;
+                }
+            }
+
+            if (room == -1 || !client->room_membership[room]) {
+                deliver(client,
+                        "ERR 003 ROOM_NOT_FOUND NID:9281\n");
+            } else {
+                client->room_membership[room] = 0;
+                snprintf(response, sizeof(response),
+                         "OK LEFT %s NID:9281\n", name);
+                deliver(client, response);
+            }
+        } else if (strcmp(line, "ROOMS") == 0) {
+            size_t used = (size_t)snprintf(
+                response, sizeof(response), "OK ROOMS ");
+            int first = 1;
+
+            for (int i = 0; i < 16; ++i) {
+                if (room_names[i][0] != '\0') {
+                    int written = snprintf(
+                        response + used, sizeof(response) - used,
+                        "%s%s", first ? "" : ",", room_names[i]);
+                    used += (size_t)written;
+                    first = 0;
+                }
+            }
+
+            snprintf(response + used, sizeof(response) - used,
+                     " NID:9281\n");
+            deliver(client, response);
+        } else if (strncmp(line, "RMSG ", 5) == 0) {
+            char *name = line + 5;
+            char *message = strchr(name, ' ');
+
+            if (message == NULL || message[1] == '\0') {
+                deliver(client,
+                        "ERR 009 INVALID_MESSAGE NID:9281\n");
+            } else {
+                *message = '\0';
+                ++message;
+                int room = -1;
+
+                for (int i = 0; i < 16; ++i) {
+                    if (room_names[i][0] != '\0' &&
+                        strcmp(room_names[i], name) == 0) {
+                        room = i;
+                        break;
+                    }
+                }
+
+                if (room == -1 ||
+                    !client->room_membership[room]) {
+                    deliver(client,
+                            "ERR 003 ROOM_NOT_FOUND NID:9281\n");
+                } else {
+                    snprintf(response, sizeof(response),
+                             "MSG ROOM %s %s %s\n",
+                             name, client->username, message);
+
+                    for (int i = 0; i < MAX_CLIENTS; ++i) {
+                        if (&clients[i] != client &&
+                            clients[i].active &&
+                            clients[i].username[0] != '\0' &&
+                            clients[i].room_membership[room]) {
+                            deliver(&clients[i], response);
+                        }
+                    }
+
+                    deliver(client, "OK SENT NID:9281\n");
+                }
+            }
+        } else if (strcmp(line, "QUIT") == 0) {
             deliver(client, "OK BYE NID:9281\n");
             quit = 1;
         } else {
@@ -349,6 +462,7 @@ int main(void)
                 slot->fd = fd;
                 slot->username[0] = '\0';
                 slot->active = 1;
+                memset(slot->room_membership, 0, sizeof(slot->room_membership));
                 break;
             }
         }
