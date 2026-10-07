@@ -1,0 +1,16 @@
+.RECIPEPREFIX := >
+CC = gcc
+CFLAGS = -Wall -Wextra -O2
+
+.PHONY: all clean
+
+all: server_8192 client_8192
+
+server_8192: server_8192.c
+>$(CC) $(CFLAGS) -pthread server_8192.c -o server_8192
+
+client_8192: client_8192.c
+>$(CC) $(CFLAGS) client_8192.c -o client_8192
+
+clean:
+>rm -f server_8192 client_8192
