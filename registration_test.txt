@@ -1,0 +1,2 @@
+Request: REGISTER student
+Response: OK REGISTERED student NID:9281
