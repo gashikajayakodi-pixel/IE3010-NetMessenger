@@ -1,3 +1,21 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#include <time.h>
+#include <stdarg.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdint.h>
@@ -28,6 +46,45 @@ typedef struct {
 static Client clients[MAX_CLIENTS];
 static char room_names[16][NAME_SIZE];
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void log_event(const char *format, ...)
+{
+    pthread_mutex_lock(&log_lock);
+
+    FILE *file = fopen("netmsg_IT21928192.log", "a");
+
+    if (file == NULL) {
+        perror("log file");
+        pthread_mutex_unlock(&log_lock);
+        return;
+    }
+
+    time_t now = time(NULL);
+    struct tm local;
+    char timestamp[32];
+
+    if (localtime_r(&now, &local) != NULL) {
+        strftime(timestamp, sizeof(timestamp),
+                 "%Y-%m-%d %H:%M:%S", &local);
+    } else {
+        strcpy(timestamp, "TIME_UNAVAILABLE");
+    }
+
+    fprintf(file, "[%s] ", timestamp);
+
+    va_list arguments;
+    va_start(arguments, format);
+    vfprintf(file, format, arguments);
+    va_end(arguments);
+
+    fputc('\n', file);
+
+    if (fclose(file) == EOF)
+        perror("write log");
+
+    pthread_mutex_unlock(&log_lock);
+}
 
 /* Caller holds lock, so writes to each socket cannot interleave. */
 static int send_all(int fd, const char *text)
@@ -57,10 +114,17 @@ static int send_all(int fd, const char *text)
 /* A failed partial write makes this connection unusable. */
 static void deliver(Client *client, const char *text)
 {
-    if (send_all(client->fd, text) == -1)
+        int result = send_all(client->fd, text);
+
+    log_event("SEND user=%s fd=%d result=%s text=%.*s",
+              client->username[0] ? client->username : "(unregistered)",
+              client->fd,
+              result == 0 ? "OK" : "FAILED",
+              (int)strcspn(text, "\n"), text);
+
+    if (result == -1)
         shutdown(client->fd, SHUT_RDWR);
 }
-
 static int read_line(int fd, char *line, size_t capacity)
 {
     size_t used = 0;
@@ -281,6 +345,10 @@ static void *handle_client(void *argument)
 
         int quit = 0;
         pthread_mutex_lock(&lock);
+        log_event("RECV user=%s fd=%d command=%s",
+                  client->username[0]
+                      ? client->username : "(unregistered)",
+                  fd, line);
 
         if (client->username[0] == '\0') {
             if (strncmp(line, "REGISTER ", 9) != 0 ||
@@ -708,6 +776,10 @@ static void *handle_client(void *argument)
         printf("Disconnected: %s\n", client->username);
         fflush(stdout);
     }
+    log_event("DISCONNECT user=%s fd=%d",
+              client->username[0]
+                  ? client->username : "(unregistered)",
+              fd);
 
     close(fd);
     client->username[0] = '\0';
@@ -755,7 +827,7 @@ int main(void)
 
     printf("Server listening on 127.0.0.1:%d\n", PORT);
     fflush(stdout);
-
+    log_event("START address=127.0.0.1 port=%d NID:9281", PORT);
     for (;;) {
         int fd = accept(server_fd, NULL, NULL);
 
