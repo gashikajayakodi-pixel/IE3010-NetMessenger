@@ -214,7 +214,40 @@ static void *handle_client(void *argument)
             printf("Broadcast from %s: %s\n",
                    client->username, line + 6);
             fflush(stdout);
-        } else if (strcmp(line, "QUIT") == 0) {
+                } else if (strncmp(line, "PMSG ", 5) == 0) {
+            char *name = line + 5;
+            char *message = strchr(name, ' ');
+
+            if (message == NULL || message[1] == '\0') {
+                deliver(client,
+                        "ERR 009 INVALID_MESSAGE NID:9281\n");
+            } else {
+                *message = '\0';
+                ++message;
+
+                Client *target = NULL;
+
+                for (int i = 0; i < MAX_CLIENTS; ++i) {
+                    if (clients[i].active &&
+                        clients[i].username[0] != '\0' &&
+                        strcmp(clients[i].username, name) == 0) {
+                        target = &clients[i];
+                        break;
+                    }
+                }
+
+                if (target == NULL) {
+                    deliver(client,
+                            "ERR 002 USER_NOT_FOUND NID:9281\n");
+                } else {
+                    snprintf(response, sizeof(response),
+                             "MSG PRIV %s %s\n",
+                             client->username, message);
+
+                    deliver(target, response);
+                    deliver(client, "OK SENT NID:9281\n");
+                }
+            }} else if (strcmp(line, "QUIT") == 0) {
             deliver(client, "OK BYE NID:9281\n");
             quit = 1;
         } else {
