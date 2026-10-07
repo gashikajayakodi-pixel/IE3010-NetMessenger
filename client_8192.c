@@ -14,25 +14,45 @@ static int send_all(int fd, const char *text)
     size_t sent = 0;
 
     while (sent < length) {
-        ssize_t count = send(fd, text + sent,
-                             length - sent, MSG_NOSIGNAL);
-
-        if (count < 0 && errno == EINTR)
+        ssize_t n = send(fd, text + sent,
+                         length - sent, MSG_NOSIGNAL);
+        if (n < 0 && errno == EINTR)
             continue;
-
-        if (count <= 0)
+        if (n <= 0)
             return -1;
-
-        sent += (size_t)count;
+        sent += (size_t)n;
     }
-
     return 0;
+}
+
+static int read_line(int fd, char *buffer, size_t capacity)
+{
+    size_t used = 0;
+
+    while (used < capacity - 1) {
+        char ch;
+        ssize_t n = recv(fd, &ch, 1, 0);
+
+        if (n == 0)
+            return 0;
+        if (n < 0) {
+            if (errno == EINTR)
+                continue;
+            return -1;
+        }
+        if (ch == '\n') {
+            buffer[used] = '\0';
+            return 1;
+        }
+        buffer[used++] = ch;
+    }
+    return -2;
 }
 
 int main(void)
 {
-    int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (socket_fd == -1) {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd == -1) {
         perror("socket");
         return EXIT_FAILURE;
     }
@@ -43,58 +63,58 @@ int main(void)
 
     if (inet_pton(AF_INET, "127.0.0.1",
                   &server.sin_addr) != 1) {
-        fprintf(stderr, "Invalid server address\n");
-        close(socket_fd);
+        fprintf(stderr, "Invalid address\n");
+        close(fd);
         return EXIT_FAILURE;
     }
 
-    if (connect(socket_fd, (struct sockaddr *)&server,
+    if (connect(fd, (struct sockaddr *)&server,
                 sizeof(server)) == -1) {
         perror("connect");
-        close(socket_fd);
+        close(fd);
         return EXIT_FAILURE;
     }
 
-    const char *command = "REGISTER student\n";
-    printf("Request: %s", command);
+    printf("Connected. Commands: REGISTER <name>, LIST, QUIT\n");
 
-    if (send_all(socket_fd, command) == -1) {
-        perror("send");
-        close(socket_fd);
-        return EXIT_FAILURE;
-    }
+    char command[256];
+    char response[1200];
+    int status = EXIT_SUCCESS;
 
-    char response[256];
-    size_t used = 0;
+    for (;;) {
+        printf("> ");
+        fflush(stdout);
 
-    while (used < sizeof(response) - 1) {
-        char ch;
-        ssize_t count = recv(socket_fd, &ch, 1, 0);
+        if (fgets(command, sizeof(command), stdin) == NULL)
+            break;
 
-        if (count < 0 && errno == EINTR)
+        if (strchr(command, '\n') == NULL) {
+            int ch;
+            while ((ch = getchar()) != '\n' && ch != EOF) {
+            }
+            fprintf(stderr, "Command too long\n");
             continue;
-
-        if (count <= 0) {
-            if (count < 0)
-                perror("recv");
-            else
-                fprintf(stderr, "Server closed before full response\n");
-
-            close(socket_fd);
-            return EXIT_FAILURE;
         }
 
-        if (ch == '\n') {
-            response[used] = '\0';
-            printf("Response: %s\n", response);
-            close(socket_fd);
-            return EXIT_SUCCESS;
+        if (send_all(fd, command) == -1) {
+            perror("send");
+            status = EXIT_FAILURE;
+            break;
         }
 
-        response[used++] = ch;
+        int result = read_line(fd, response, sizeof(response));
+        if (result != 1) {
+            fprintf(stderr, "Connection closed or response error\n");
+            status = EXIT_FAILURE;
+            break;
+        }
+
+        printf("%s\n", response);
+
+        if (strcmp(response, "OK BYE NID:9281") == 0)
+            break;
     }
 
-    fprintf(stderr, "Response too long\n");
-    close(socket_fd);
-    return EXIT_FAILURE;
+    close(fd);
+    return status;
 }
