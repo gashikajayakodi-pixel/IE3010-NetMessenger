@@ -1,0 +1,2 @@
+ERR 004 FILE_TOO_LARGE NID:9281
+PASS: server rejects files larger than 1 MiB
