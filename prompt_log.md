@@ -104,3 +104,38 @@ The README records implementation limits and delivery semantics.
 
 Further AI assistance with the report, design diary and reflection
 will be recorded in an additional entry.
+## 2026-10-08 - Compliance review and additional validation
+
+Tool: ChatGPT / Codex.
+This is a retrospective paraphrase of the interaction.
+
+Requests:
+Asked whether the assignment met the PDF requirements, how protocol
+features mapped to GitHub commits, whether values were hard-coded,
+and what remained after a reported deadline extension.
+
+Assistance received and used:
+- Compared the assignment requirements with the observed implementation
+  and identified missing documents and validation gaps.
+- Guided adding CONNECT and FILE_SENT timestamped log entries.
+- Supplied Python socket tests for fragmented commands, multiple commands
+  in one send, fragmented binary payloads followed immediately by LIST,
+  invalid commands, disconnect cleanup, interrupted uploads and unknown
+  file targets.
+- Guided a room file-transfer test and cmp checks for delivered and
+  stored bytes.
+- Supplied commands to capture listening-port, storage and log evidence.
+- Drafted the additional README validation section and this log entry.
+
+My actions and observed results:
+I inserted the logging changes, saved and compiled the C server, restarted
+it, ran the supplied tests and commands, and shared screenshots.
+The recorded tests passed. I committed and pushed the code changes,
+test-result files and personalisation evidence.
+
+Corrections and limits:
+The earlier statement that coding and tests were finished was too broad.
+The later review identified additional tests and submission documents.
+Passing these tests does not prove every failure case is handled.
+FILE_SENT means the server completed socket sends; it does not confirm
+that the receiving client saved the file to disk.

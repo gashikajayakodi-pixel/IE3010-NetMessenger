@@ -172,3 +172,29 @@ The application server and client are implemented in C.
 
 The implementation report, design diary, AI prompt log and reflection
 must accompany the source files and genuine test evidence.
+## Additional validation - 2026-10-08
+
+- Room file transfer: sample.txt reached roomreceiver through filetest.
+  Both the received file and server copy matched the original using cmp.
+- framing_test.txt: a command sent in fragments and multiple commands
+  sent together were handled successfully.
+- binary_framing_test.txt: a 1024-byte binary payload sent in chunks
+  was stored and forwarded unchanged; LIST immediately after the
+  payload was handled correctly.
+- invalid_command_test.txt: an unknown command returned an error
+  with the NID tag; the connection remained usable.
+- disconnect_test.txt: closing without QUIT released the username;
+  reconnecting did not retain the previous room membership.
+- interrupted_upload_test.txt: an incomplete upload left no final
+  file or new temporary upload file; the server remained available.
+- invalid_file_target_test.txt: an unknown target returned
+  ERR 002 USER_NOT_FOUND; payload framing remained intact.
+- port_evidence.txt and storage_evidence.txt record the personalised
+  listening port and stored files.
+- log_excerpt.txt records timestamped connection, command, response
+  and disconnection events.
+- Added CONNECT logging and FILE_SENT logging. FILE_SENT records
+  completion of socket sends, not confirmation of recipient disk storage.
+
+These checks cover the specific scenarios described, not every possible
+failure case. Python was used as a test harness; the application is in C.
