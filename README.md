@@ -13,7 +13,6 @@ Registration number: IT21928192
 - Makefile: Makefile_8192
 - Server log: netmsg_IT21928192.log
 - Server storage: ./storage/IT21928192/<sender_username>/<filename>
-- Submission archive: IE3010_IT21928192.zip
 
 ## Requirements and build
 
