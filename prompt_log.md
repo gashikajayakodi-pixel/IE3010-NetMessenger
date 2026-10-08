@@ -139,3 +139,16 @@ The later review identified additional tests and submission documents.
 Passing these tests does not prove every failure case is handled.
 FILE_SENT means the server completed socket sends; it does not confirm
 that the receiving client saved the file to disk.
+
+## 2026-10-08 - Design diary draft
+
+Tool: ChatGPT / Codex.
+Prompt: "then we can create design diary?"
+
+The AI drafted design_diary.md using the development conversation,
+observed tests and commit history. It described concurrency, framing,
+file storage, debugging obstacles and implementation limitations.
+I created the file using the supplied terminal command and inspected
+its beginning and ending in VS Code. The draft explicitly identifies
+itself as retrospective rather than a diary maintained during development.
+The final document still requires my review and formatting to 0.5-1 page.
