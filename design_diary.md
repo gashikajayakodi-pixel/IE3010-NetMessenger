@@ -1,63 +1,67 @@
 # NetMessenger Design Diary
 
 Registration number: IT21928192
+Development sessions: 7–8 October 2026
 
-This diary was compiled retrospectively from the development
-conversation, screenshots and Git commits for 7–8 October 2026.
+This diary summarises the development retrospectively using the
+conversation, screenshots and Git commits.
 
-## 7 October 2026 — Initial Setup
+## 7 October 2026 — Setup and Personalisation
 
 I reviewed the assignment requirements and configured Ubuntu on WSL,
-GCC, Make, Git and VS Code. The numeric registration is 21928192.
-Its last four digits are 8192, giving port 6000 + 8192 = 14192.
-Digits 3–6 are 9281, giving NID:9281.
+GCC, Make, Git and VS Code. I calculated the personalised values:
 
-I created the GitHub repository and verified basic C compilation.
-The personalised project files are server_8192.c, client_8192.c
-and Makefile_8192.
+- Registration number: IT21928192
+- Numeric part: 21928192
+- Last four digits: 8192
+- TCP port: 6000 + 8192 = 14192
+- Numeric digits 3–6: 9281
+- Node ID tag: NID:9281
 
-## 7–8 October 2026 — Messaging and Rooms
+I created the GitHub repository and used server_8192.c,
+client_8192.c and Makefile_8192 as the project filenames.
 
-The server uses a detached pthread for each client, with a mutex
-protecting shared user and room state. This supports simultaneous
-connections. The client uses poll() to monitor terminal input and
-incoming messages. Holding the server mutex during outgoing transfers
-can delay other clients when a recipient is slow.
+## 7–8 October 2026 — Concurrency and Messaging
 
-I implemented and tested REGISTER, LIST, QUIT, BCAST and PMSG.
-Five-client testing confirmed that a broadcast reached the four
-other clients. I also tested JOIN, LEAVE, ROOMS and RMSG, including
-room message delivery and an error after leaving a room.
-Presence notifications showed users joining and leaving.
+I used C and BSD TCP sockets with a detached pthread for each client.
+A mutex protects shared user and room state. The client uses poll()
+to monitor terminal input and incoming messages.
+
+I implemented and tested REGISTER, LIST, QUIT, BCAST and PMSG,
+followed by JOIN, LEAVE, ROOMS and RMSG. Presence notifications
+showed users joining and leaving. Holding the server mutex during
+outgoing transfers can delay other clients when a recipient is slow;
+a send timeout bounds individual blocked sends.
 
 ## 8 October 2026 — File Transfer and Logging
 
-The main challenge was separating binary payloads from text commands.
-The server reads exactly the declared file size, allowing newline and
-NUL bytes inside files. Temporary uploads are renamed after completion
-and removed if the connection closes before completion.
+I separated newline-delimited commands from binary file payloads.
+The server reads exactly the declared file size and loops over partial
+sends. Uploads use temporary files that are renamed after completion
+and removed when an upload is interrupted.
 
 Files are stored under storage/IT21928192/<sender>/<filename>.
-The client saves received files with unique suffixes. I chose a
-1 MiB size limit and used a MSG FILE header for recipient framing.
+I chose a 1 MiB size limit. The client uses a MSG FILE header for
+recipient framing and saves files with unique suffixes.
 
-Timestamped events are recorded in netmsg_IT21928192.log.
-A later review added CONNECT and FILE_SENT entries. FILE_SENT records
-completed socket sends rather than confirmation of recipient storage.
+I added timestamped logging in netmsg_IT21928192.log. A later review
+added CONNECT and FILE_SENT entries. FILE_SENT records completed
+socket sends rather than confirmation of recipient disk storage.
 
 ## 8 October 2026 — Debugging and Validation
 
-A missing closing brace caused compiler errors and was corrected.
+I corrected a missing closing brace that caused compiler errors.
 Selecting the correct terminal and distinguishing shell commands
 from client commands were practical obstacles.
 
-Tests verified text and binary transfers, room file delivery,
-file-size rejection, fragmented commands and binary payloads,
-multiple commands sent together, invalid commands and unknown file
-targets. Byte comparisons confirmed that the tested stored and
-delivered files matched their originals.
+I tested five simultaneous clients, messaging, rooms, text and binary
+file transfers, room file delivery and file-size rejection. Additional
+tests covered fragmented commands and payloads, multiple commands
+sent together, unknown commands, invalid file targets, disconnect
+cleanup and interrupted uploads.
 
-Disconnect testing confirmed username release and removal of previous
-room membership. Interrupted uploads left no incomplete final file
-or new temporary upload file. The personalised Makefile built both
-programs without compiler warnings.
+I used cmp to confirm that the tested stored and received files
+matched the originals byte-for-byte. Disconnect testing confirmed
+username release and removal of previous room membership.
+Interrupted uploads left no incomplete final or new temporary file.
+The personalised Makefile built both programs without warnings.
