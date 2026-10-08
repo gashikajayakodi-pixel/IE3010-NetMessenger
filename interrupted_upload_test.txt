@@ -1,0 +1,3 @@
+OK REGISTERED interruptedcheck NID:9281
+PASS: interrupted upload leaves no incomplete or temporary file
+PASS: server remains available and username is released
