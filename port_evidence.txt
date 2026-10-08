@@ -1,0 +1,2 @@
+State  Recv-Q Send-Q Local Address:Port  Peer Address:PortProcess
+LISTEN 0      32         127.0.0.1:14192      0.0.0.0:*    users:(("server_8192",pid=15312,fd=3))
