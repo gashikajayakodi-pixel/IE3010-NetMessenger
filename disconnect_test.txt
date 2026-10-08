@@ -1,0 +1,7 @@
+OK REGISTERED dropcheck NID:9281
+OK JOINED cleanuproom NID:9281
+OK REGISTERED dropcheck NID:9281
+PASS: disconnected username can be registered again
+ERR 003 ROOM_NOT_FOUND NID:9281
+PASS: previous room membership was cleared
+OK BYE NID:9281

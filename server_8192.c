@@ -318,7 +318,9 @@ static int forward_file(Client *target, const char *sender,
     }
 
     fclose(file);
-    return 0;
+        log_event("FILE_SENT sender=%s recipient=%s filename=%s",
+              sender, target->username, filename);
+              return 0;
 }
 static void *handle_client(void *argument)
 {
@@ -838,7 +840,7 @@ int main(void)
             perror("accept");
             continue;
         }
-
+        log_event("CONNECT fd=%d", fd);
         /* Bound how long a slow receiver can block a send. */
         struct timeval timeout = { .tv_sec = 2, .tv_usec = 0 };
 
