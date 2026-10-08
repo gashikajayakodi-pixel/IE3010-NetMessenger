@@ -152,3 +152,16 @@ I created the file using the supplied terminal command and inspected
 its beginning and ending in VS Code. The draft explicitly identifies
 itself as retrospective rather than a diary maintained during development.
 The final document still requires my review and formatting to 0.5-1 page.
+
+## 2026-10-08 - Reflection drafting
+
+Tool: ChatGPT / Codex.
+I requested a reflection addressing the four assignment questions and
+provided my own comments in Sinhala about the value of testing, verifying
+file transfers and testing simultaneous clients.
+
+The AI drafted the English reflection using my comments and the recorded
+development experience. I requested removal of a sentence about further
+viva preparation and replacement with practical learning about how the
+protocol commands work. I saved the revised draft in reflection.md.
+The wc -w command reported 393 words, including headings and Markdown.
