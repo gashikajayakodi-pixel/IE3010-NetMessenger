@@ -1,6 +1,0 @@
-OK REGISTERED framinguser NID:9281
-PASS: fragmented command accepted
-OK USERS roomsender,framinguser NID:9281
-OK ROOMS filetest NID:9281
-OK BYE NID:9281
-PASS: multiple commands in one send handled

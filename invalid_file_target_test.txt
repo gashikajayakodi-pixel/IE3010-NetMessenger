@@ -1,3 +1,0 @@
-ERR 002 USER_NOT_FOUND NID:9281
-OK USERS roomsender,targetcheck NID:9281
-PASS: unknown target rejected and payload framing preserved

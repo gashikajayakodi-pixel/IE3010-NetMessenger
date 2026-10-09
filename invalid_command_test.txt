@@ -1,3 +1,0 @@
-ERR 007 UNKNOWN_COMMAND NID:9281
-OK USERS roomsender,errorcheck NID:9281
-PASS: invalid command rejected; connection remains usable

@@ -1,6 +1,0 @@
-OK REGISTERED fragmentfile NID:9281
-OK FILE_RECEIVED fragmented.bin NID:9281
-MSG FILE fragmentfile fragmented.bin 1024
-OK USERS roomsender,fragmentfile NID:9281
-PASS: fragmented binary delivery and storage match
-PASS: command immediately after payload handled
